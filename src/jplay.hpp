@@ -11,14 +11,14 @@ private:
   nlohmann::json _data;
 
 public:
-  jplay(/* args */) : _data(produce()) {}
+  jplay(string str = "") : _data(produce()) {
+    if (!str.empty()) {
+      _data = nlohmann::json::parse(str);
+    }
+  }
 
   void deal_with(nlohmann::json &j) {
     _data = j;
-  }
-
-  void deal_with() {
-    deal_with(_data);
   }
 
   string dump() {

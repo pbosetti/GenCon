@@ -1,6 +1,5 @@
 
 find_package(Python3 COMPONENTS Interpreter Development)
-# find_package (PythonLibs REQUIRED)
 
 message(STATUS "Python version: ${Python3_VERSION}")
 message(STATUS "Python include dirs: ${Python3_INCLUDE_DIRS}") 

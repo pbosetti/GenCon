@@ -7,7 +7,7 @@
 using namespace std;
 using namespace nlohmann;
 
-void test_function(PyObject *obj, json *out, ssize_t level = 1) {
+void dict_into_json(PyObject *obj, json *out, ssize_t level = 1) {
   PyObject *key, *value;
   char const *kstr = NULL;
   Py_ssize_t pos = 0;
@@ -29,16 +29,21 @@ void test_function(PyObject *obj, json *out, ssize_t level = 1) {
       (*out)[kstr] = PyString_AsString(value);
       cout << "\"" << PyString_AsString(value) << "\"" << endl;
     } else if (PyList_Check(value)) {
+      (*out)[kstr] = json::array();
       cout << "[";
       for (size_t i = 0; i < PyList_Size(value); i++) {
         PyObject *item = PyList_GET_ITEM(value, i);
         if (PyInt_Check(item)) {
+          (*out)[kstr].push_back(PyInt_AsLong(item));
           cout << PyInt_AsLong(item);
         } else if (PyFloat_Check(item)) {
+          (*out)[kstr].push_back(PyFloat_AsDouble(item));
           cout << PyFloat_AsDouble(item);
         } else if (PyUnicode_Check(item)) {
+          (*out)[kstr].push_back(PyUnicode_AsUTF8(item));
           cout << "\"" << PyUnicode_AsUTF8(item) << "\"";
         } else if (PyString_Check(item)) {
+          (*out)[kstr].push_back(PyString_AsString(item));
           cout << "\"" << PyString_AsString(item) << "\"";
         } else {
           cout << "Unsupported (" << Py_TYPE(item)->tp_name << ")";
@@ -49,7 +54,9 @@ void test_function(PyObject *obj, json *out, ssize_t level = 1) {
       }
       cout << "]" << endl;
     } else if (PyDict_Check(value)) {
-      test_function(value, out, level + 1);
+      json sub = json();
+      dict_into_json(value, &sub, level + 1);
+      (*out)[kstr] = sub;
     } else {
       cout  << "Unsupported (" << Py_TYPE(value)->tp_name << ")" << endl;
     }
@@ -60,14 +67,38 @@ void test_function(PyObject *obj, json *out, ssize_t level = 1) {
 
 %typemap(in) nlohmann::json &j {
   // JSON typemap
-  $1 = new json();
-  test_function($input, $1);
+  // we get a PyObject* and we need to convert it to a nlohmann::json
+  if (Py_TYPE($input) == SwigPyObject_type()) {
+    if (!SWIG_IsOK(SWIG_ConvertPtr($input, (void **) &$1, $1_descriptor, 0))) {
+      SWIG_exception_fail(SWIG_TypeError, "in method '$symname', expecting pointer to type nlohmann::json");
+    }
+  } 
+  // we get a dictionary: convert it to a nlohmann::json object
+  else if (PyDict_Check($input)) {
+    $1 = new json();
+    dict_into_json($input, $1);
+  }
+  // complain and fail 
+  else {
+    PyErr_SetString(PyExc_TypeError, "not a dictionary nor a nlohmann::json pointer");
+    SWIG_fail;
+  }
 }
 
 %typemap(out) string {
   $result = PyString_FromString($1.c_str());
 }
 
+%typecheck(SWIG_TYPECHECK_STRING) string {
+  $1 = PyString_Check($input) || PyUnicode_Check($input);
+}
+%typemap(in) string {
+  if (PyString_Check($input)) {
+    $1 = PyString_AsString($input);
+  } if (PyUnicode_Check($input)) {
+    $1 = PyUnicode_AsUTF8($input);
+  }
+}
 
 // %typemap(in) int i {
 //   // TYPEMAP!
@@ -84,7 +115,7 @@ void test_function(PyObject *obj, json *out, ssize_t level = 1) {
 class jplay {
 
 public:
-  jplay();
+  jplay(string str = "");
 
   static void test(int i);
 
