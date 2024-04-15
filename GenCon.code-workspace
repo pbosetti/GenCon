@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"*.h": "c",
+			"*.rmd": "markdown",
+			"*.hh": "c++",
+			"__split_buffer": "cpp",
+			"string": "cpp",
+			"vector": "cpp"
+		}
+	}
+}
