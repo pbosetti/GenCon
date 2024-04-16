@@ -5,19 +5,20 @@
 #include <nlohmann/json.hpp>
 
 using namespace std;
+using namespace nlohmann;
 
 class jplay {
 private:
-  nlohmann::json _data;
+  json _data;
 
 public:
   jplay(string str = "") : _data(produce()) {
     if (!str.empty()) {
-      _data = nlohmann::json::parse(str);
+      _data = json::parse(str);
     }
   }
 
-  void deal_with(nlohmann::json &j) {
+  void deal_with(json &j) {
     _data = j;
   }
 
@@ -25,8 +26,8 @@ public:
     return _data.dump();
   }
 
-  nlohmann::json produce_ptr() {
-    nlohmann::json j;
+  json produce_ptr() {
+    json j;
     j["name"] = "John";
     j["age"] = 25;
     j["is_student"] = true;
@@ -38,15 +39,15 @@ public:
     return j;
   }
 
-  nlohmann::json produce() {
+  json produce() {
     return produce_ptr();
   }
 
-  static void test(int i) {
+  static void test(int i = 0) {
     cout << "Test: " << i << endl;
   }
 
-  nlohmann::json get_data() {
+  json get_data() {
     return _data;
   }
 

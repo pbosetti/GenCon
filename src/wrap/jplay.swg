@@ -1,6 +1,8 @@
 %module jplay
 %include "std_string.i"
 
+%rename(json) nlohmann::json;
+
 %{
 #include "../jplay.hpp"
 #include "nlohmann/json.hpp"
@@ -54,7 +56,7 @@ int dict_into_json(PyObject *obj, json *out) {
 }
 
 
-int json_into_dict(nlohmann::json *j, PyObject *obj) {
+int json_into_dict(json *j, PyObject *obj) {
   for (json::iterator it = j->begin(); it != j->end(); ++it) {
     if (it.value().is_number_integer()) {
       PyDict_SetItemString(obj, it.key().c_str(), PyLong_FromLong(it.value().get<int>()));
@@ -93,7 +95,7 @@ int json_into_dict(nlohmann::json *j, PyObject *obj) {
 
 %}
 
-%typemap(in) nlohmann::json &j {
+%typemap(in) json &j {
   // JSON typemap
   // we get a PyObject* and we need to convert it to a nlohmann::json
   if (Py_TYPE($input) == SwigPyObject_type()) {
@@ -129,7 +131,7 @@ int json_into_dict(nlohmann::json *j, PyObject *obj) {
   $result = PyString_FromString($1.c_str());
 }
 
-%typemap(out) nlohmann::json {
+%typemap(out) json {
   // Dictionary typemap
   $result = PyDict_New();
   if (json_into_dict(&$1, $result)) 
@@ -140,20 +142,22 @@ int json_into_dict(nlohmann::json *j, PyObject *obj) {
 class jplay {
 
 public:
+  %feature("python:cdefaultargs") jplay::jplay;
   jplay(string str = "");
 
-  static void test(int i);
+  %feature("python:cdefaultargs") jplay::test;
+  static void test(int i = 0);
 
-  void deal_with(nlohmann::json &j);
+  void deal_with(json &j);
 
   string dump();
 
-  nlohmann::json produce();
+  json produce();
 
-  nlohmann::json get_data();
+  json get_data();
 
   // delete typemap so we can return a pointer
-  %typemap(out) nlohmann::json;
-  nlohmann::json produce_ptr();
+  %typemap(out) json;
+  json produce_ptr();
 
 };
