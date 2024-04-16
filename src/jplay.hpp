@@ -18,6 +18,10 @@ public:
     }
   }
 
+  ~jplay() {
+    cout << "Destructor called" << endl;
+  }
+
   void deal_with(json &j) {
     _data = j;
   }

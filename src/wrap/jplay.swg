@@ -115,6 +115,12 @@ int json_into_dict(json *j, PyObject *obj) {
     SWIG_fail;
   }
 }
+%typemap(freearg) json &j {
+  if ($1) {
+    cout << "freeing json" << endl;
+    delete $1;
+  }
+}
 
 %typecheck(SWIG_TYPECHECK_STRING) string {
   $1 = PyString_Check($input) || PyUnicode_Check($input);
@@ -144,6 +150,8 @@ class jplay {
 public:
   %feature("python:cdefaultargs") jplay::jplay;
   jplay(string str = "");
+
+  ~jplay();
 
   %feature("python:cdefaultargs") jplay::test;
   static void test(int i = 0);
