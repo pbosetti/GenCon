@@ -7,62 +7,90 @@
 using namespace std;
 using namespace nlohmann;
 
-void dict_into_json(PyObject *obj, json *out, ssize_t level = 1) {
+int dict_into_json(PyObject *obj, json *out) {
   PyObject *key, *value;
   char const *kstr = NULL;
   Py_ssize_t pos = 0;
 
-  cout << "{" << endl;
   while (PyDict_Next(obj, &pos, &key, &value)) {
     kstr = PyUnicode_AsUTF8(key);
-    cout << string(level, ' ') << string(level, ' ') << kstr << ": ";
     if (PyInt_Check(value)) {
       (*out)[kstr] = PyInt_AsLong(value);
-      cout << PyInt_AsLong(value) << endl;
     } else if (PyFloat_Check(value)) {
       (*out)[kstr] = PyFloat_AsDouble(value);
-      cout << PyFloat_AsDouble(value) << endl;
     } else if (PyUnicode_Check(value)) {
       (*out)[kstr] = PyUnicode_AsUTF8(value);
-      cout << "\"" << PyUnicode_AsUTF8(value) << "\"" << endl;
     } else if (PyString_Check(value)) {
       (*out)[kstr] = PyString_AsString(value);
-      cout << "\"" << PyString_AsString(value) << "\"" << endl;
+    } else if (PyBool_Check(value)) {
+      (*out)[kstr] = value == Py_True ? true : false;
     } else if (PyList_Check(value)) {
       (*out)[kstr] = json::array();
-      cout << "[";
       for (size_t i = 0; i < PyList_Size(value); i++) {
         PyObject *item = PyList_GET_ITEM(value, i);
         if (PyInt_Check(item)) {
           (*out)[kstr].push_back(PyInt_AsLong(item));
-          cout << PyInt_AsLong(item);
         } else if (PyFloat_Check(item)) {
           (*out)[kstr].push_back(PyFloat_AsDouble(item));
-          cout << PyFloat_AsDouble(item);
         } else if (PyUnicode_Check(item)) {
           (*out)[kstr].push_back(PyUnicode_AsUTF8(item));
-          cout << "\"" << PyUnicode_AsUTF8(item) << "\"";
         } else if (PyString_Check(item)) {
           (*out)[kstr].push_back(PyString_AsString(item));
-          cout << "\"" << PyString_AsString(item) << "\"";
         } else {
-          cout << "Unsupported (" << Py_TYPE(item)->tp_name << ")";
-        }
-        if (i < PyList_Size(value) - 1) {
-          cout << ", ";
+          PyErr_SetString(PyExc_TypeError, (string("unsupported type in list ") + kstr).c_str());
+          return 1;
         }
       }
-      cout << "]" << endl;
     } else if (PyDict_Check(value)) {
       json sub = json();
-      dict_into_json(value, &sub, level + 1);
+      dict_into_json(value, &sub);
       (*out)[kstr] = sub;
     } else {
-      cout  << "Unsupported (" << Py_TYPE(value)->tp_name << ")" << endl;
+      PyErr_SetString(PyExc_TypeError, (string("unsupported type in dictionary ") + kstr).c_str());
+      return 1;
     }
   }
-  cout << string(level-1, ' ') << string(level-1, ' ') << "}" << endl;
+  return 0;
 }
+
+
+int json_into_dict(nlohmann::json *j, PyObject *obj) {
+  for (json::iterator it = j->begin(); it != j->end(); ++it) {
+    if (it.value().is_number_integer()) {
+      PyDict_SetItemString(obj, it.key().c_str(), PyLong_FromLong(it.value().get<int>()));
+    } else if (it.value().is_number_float()) {
+      PyDict_SetItemString(obj, it.key().c_str(), PyFloat_FromDouble(it.value().get<double>()));
+    } else if (it.value().is_string()) {
+      PyDict_SetItemString(obj, it.key().c_str(), PyUnicode_FromString(it.value().get<string>().c_str()));
+    } else if (it.value().is_boolean()) {
+      PyDict_SetItemString(obj, it.key().c_str(), PyBool_FromLong(it.value().get<bool>()));
+    } else if (it.value().is_array()) {
+      PyObject *list = PyList_New(it.value().size());
+      for (size_t i = 0; i < it.value().size(); i++) {
+        if (it.value()[i].is_number_integer()) {
+          PyList_SetItem(list, i, PyLong_FromLong(it.value()[i].get<int>()));
+        } else if (it.value()[i].is_number_float()) {
+          PyList_SetItem(list, i, PyFloat_FromDouble(it.value()[i].get<double>()));
+        } else if (it.value()[i].is_string()) {
+          PyList_SetItem(list, i, PyUnicode_FromString(it.value()[i].get<string>().c_str()));
+        } else {
+          PyErr_SetString(PyExc_TypeError, (string("unsupported type in list ") + it.key()).c_str());
+          return 1;
+        }
+      }
+      PyDict_SetItemString(obj, it.key().c_str(), list);
+    } else if (it.value().is_object()) {
+      PyObject *sub = PyDict_New();
+      json_into_dict(&it.value(), sub);
+      PyDict_SetItemString(obj, it.key().c_str(), sub);
+    } else {
+      PyErr_SetString(PyExc_TypeError, (string("unsupported type in dictionary ") + it.key()).c_str());
+      return 1;
+    }
+  }
+  return 0;
+}
+
 %}
 
 %typemap(in) nlohmann::json &j {
@@ -76,17 +104,14 @@ void dict_into_json(PyObject *obj, json *out, ssize_t level = 1) {
   // we get a dictionary: convert it to a nlohmann::json object
   else if (PyDict_Check($input)) {
     $1 = new json();
-    dict_into_json($input, $1);
+    if (dict_into_json($input, $1))
+      SWIG_fail;
   }
   // complain and fail 
   else {
     PyErr_SetString(PyExc_TypeError, "not a dictionary nor a nlohmann::json pointer");
     SWIG_fail;
   }
-}
-
-%typemap(out) string {
-  $result = PyString_FromString($1.c_str());
 }
 
 %typecheck(SWIG_TYPECHECK_STRING) string {
@@ -100,16 +125,16 @@ void dict_into_json(PyObject *obj, json *out, ssize_t level = 1) {
   }
 }
 
-// %typemap(in) int i {
-//   // TYPEMAP!
-//   if (!PyDict_Check($input)) {
-//     PyErr_SetString(PyExc_TypeError, "not a dictionary");
-//     SWIG_fail;
-//   }
-//   json j = json();
-//   test_function($input, &j);
-//   $1 = 42;
-// }
+%typemap(out) string {
+  $result = PyString_FromString($1.c_str());
+}
+
+%typemap(out) nlohmann::json {
+  // Dictionary typemap
+  $result = PyDict_New();
+  if (json_into_dict(&$1, $result)) 
+    SWIG_fail;
+}
 
 
 class jplay {
@@ -123,8 +148,12 @@ public:
 
   string dump();
 
-  // void deal_with();
-
   nlohmann::json produce();
+
+  nlohmann::json get_data();
+
+  // delete typemap so we can return a pointer
+  %typemap(out) nlohmann::json;
+  nlohmann::json produce_ptr();
 
 };

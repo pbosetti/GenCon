@@ -25,7 +25,7 @@ public:
     return _data.dump();
   }
 
-  nlohmann::json produce() {
+  nlohmann::json produce_ptr() {
     nlohmann::json j;
     j["name"] = "John";
     j["age"] = 25;
@@ -38,8 +38,16 @@ public:
     return j;
   }
 
+  nlohmann::json produce() {
+    return produce_ptr();
+  }
+
   static void test(int i) {
     cout << "Test: " << i << endl;
+  }
+
+  nlohmann::json get_data() {
+    return _data;
   }
 
 };
