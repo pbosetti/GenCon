@@ -5,7 +5,7 @@ using namespace GC_namespace;
 
 int main() {
   GenCon gc;
-  std::cout << gc.dump() << std::endl;
+  gc.dump();
 
   return 0;
 }

@@ -6,10 +6,51 @@
 %{
 #include "../gencon.hpp"
 #include <GenericContainer.hh>
+#include <complex>
 using namespace std;
 using namespace GC_namespace;
 
-int dict_into_gc(PyObject *obj, GenericContainer *gc) {
+static int dict_into_gc(PyObject *obj, GenericContainer *gc);
+
+static int array_into_dict(PyObject *obj, GenericContainer *gc, string key) {
+  if (PyList_Check(obj)) {
+    for (size_t i = 0; i < PyList_Size(obj); i++) {
+      PyObject *item = PyList_GET_ITEM(obj, i);
+      if (PyInt_Check(item)) {
+        (*gc)[i] = (long_type)PyInt_AsLong(item);
+      } else if (PyFloat_Check(item)) {
+        (*gc)[i] = PyFloat_AsDouble(item);
+      } else if (PyComplex_Check(item)) {
+        Py_complex pc = PyComplex_AsCComplex(item);
+        complex<double> c = complex<double>(pc.real, pc.imag);
+        (*gc)[i] = c;
+      } else if (PyUnicode_Check(item)) {
+        (*gc)[i] = PyUnicode_AsUTF8(item);
+      } else if (PyString_Check(item)) {
+        (*gc)[i] = PyString_AsString(item);
+      } else if (PyBool_Check(item)) {
+        (*gc)[i] = (bool)(item == Py_True);
+      } else if (PyList_Check(item)) {
+        (*gc)[i].set_vector(PyList_Size(item));
+        if (array_into_dict(item, &(*gc)[i], key))
+          return 1;
+      } else if (PyDict_Check(item)) {
+        GenericContainer sub = GenericContainer();
+        dict_into_gc(item, &sub);
+        (*gc)[i] = sub;
+      } else {
+        PyErr_SetString(PyExc_TypeError, "unsupported type in list");
+        return 1;
+      }
+    }
+  } else {
+    PyErr_SetString(PyExc_TypeError, (string("not a list ") + key).c_str());
+    return 1;
+  }
+  return 0;
+}
+
+static int dict_into_gc(PyObject *obj, GenericContainer *gc) {
   PyObject *key, *value;
   char const *kstr = NULL;
   Py_ssize_t pos = 0;
@@ -20,21 +61,36 @@ int dict_into_gc(PyObject *obj, GenericContainer *gc) {
       (*gc)[kstr] = (long_type)PyInt_AsLong(value);
     } else if (PyFloat_Check(value)) {
       (*gc)[kstr] = PyFloat_AsDouble(value);
+    } else if (PyComplex_Check(value)) {
+      Py_complex pc = PyComplex_AsCComplex(value);
+      complex<double> c = complex<double>(pc.real, pc.imag);
+      (*gc)[kstr] = c;
     } else if (PyUnicode_Check(value)) {
       (*gc)[kstr] = PyUnicode_AsUTF8(value);
     } else if (PyString_Check(value)) {
       (*gc)[kstr] = PyString_AsString(value);
     } else if (PyBool_Check(value)) {
-      (*gc)[kstr] = value == Py_True ? true : false;
+      (*gc)[kstr] = (bool)(value == Py_True);
+    } else if (PyList_Check(value)) {
+      (*gc)[kstr].set_vector(PyList_Size(value));
+      if (array_into_dict(value, &(*gc)[kstr], kstr))
+        return 1;
+    } else if (PyDict_Check(value)) {
+      GenericContainer sub = GenericContainer();
+      dict_into_gc(value, &sub);
+      (*gc)[kstr] = sub;
     } else {
-      PyErr_SetString(PyExc_TypeError, (string("unsupported type in dictionary ") + kstr).c_str());
+      PyErr_SetString(PyExc_TypeError, (string("unsupported type in dictionary at key \"") + kstr + "\"").c_str());
       return 1;
     }
   }
   return 0;
 }
 
-int gc_into_dict(GenericContainer *gc, PyObject *obj) { return 0; }
+static int gc_into_dict(GenericContainer *gc, PyObject *obj) {
+  
+  return 0;
+}
 /*
   for (json::iterator it = j->begin(); it != j->end(); ++it) {
     if (it.value().is_number_integer()) {
@@ -88,7 +144,6 @@ int gc_into_dict(GenericContainer *gc, PyObject *obj) { return 0; }
 }
 %typemap(freearg) GenericContainer &gc {
   if ($1) {
-    cout << "Freeing GenericContainer" << endl;
     delete $1;
   }
 }
@@ -115,7 +170,9 @@ public:
 
   void deal_with(GenericContainer &gc);
 
-  string dump();
+  string json_string();
+
+  void dump();
 
   GenericContainer produce();
 
