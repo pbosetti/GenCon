@@ -21,10 +21,22 @@ FetchContent_Declare(nlohmann_json
     GIT_TAG        v3.11.3
     GIT_SHALLOW    TRUE
 )
-FetchContent_MakeAvailable(nlohmann_json)
+
+FetchContent_Declare(GenericContainer
+  GIT_REPOSITORY https://github.com/ebertolazzi/GenericContainer.git
+  GIT_TAG cfae737
+  GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(nlohmann_json GenericContainer)
 
 include_directories(
   ${nlohmann_json_SOURCE_DIR}/include
+  ${GenericContainer_SOURCE_DIR}/include
+)
+
+link_directories(
+  ${GenericContainer_BINARY_DIR}
 )
 
 
@@ -37,6 +49,7 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/src/wrap)
 
 
 add_executable(gencon_test ${SOURCE_DIR}/main/gencon.cpp)
+target_link_libraries(gencon_test GenericContainer_osx_static_debug)
 
 add_executable(jplay_test ${SOURCE_DIR}/main/jplay.cpp)
 

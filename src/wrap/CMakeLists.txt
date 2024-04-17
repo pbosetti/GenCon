@@ -5,26 +5,36 @@ message(STATUS "Python version: ${Python3_VERSION}")
 message(STATUS "Python include dirs: ${Python3_INCLUDE_DIRS}") 
 message(STATUS "Python libraries: ${Python3_LIBRARY_DIRS}")
 
-add_custom_target(
-  jplay_swig ALL
-  COMMAND swig -c++ -python -o jplay.cpp jplay.swg
-  WORKING_DIRECTORY ${SOURCE_DIR}/wrap
-  BYPRODUCTS ${SOURCE_DIR}/wrap/jplay.cpp
-  SOURCES ${SOURCE_DIR}/wrap/jplay.swg
+
+macro(add_wrapper name)
+  add_custom_target(
+    ${name}_swig ALL
+    COMMAND swig -c++ -python -o ${name}.cpp ${name}.swg
+    WORKING_DIRECTORY ${SOURCE_DIR}/wrap
+    BYPRODUCTS ${SOURCE_DIR}/wrap/${name}.cpp
+    SOURCES ${SOURCE_DIR}/wrap/${name}.swg
+  )
+
+  add_library(${name} SHARED ${SOURCE_DIR}/wrap/${name}.cpp)
+  target_include_directories(${name} PUBLIC ${Python3_INCLUDE_DIRS})
+  target_link_directories(${name} PUBLIC ${Python3_LIBRARY_DIRS})
+  set_target_properties (${name} PROPERTIES PREFIX "")
+  set_target_properties (${name} PROPERTIES OUTPUT_NAME "_${name}")
+  if (WIN32)
+    set_target_properties (${name} PROPERTIES SUFFIX ".pyd")
+  else()
+    set_target_properties (${name} PROPERTIES SUFFIX ".so")
+  endif()
+  target_link_libraries(${name} ${LIB_LIST} ${Python3_LIBRARIES})
+  install(PROGRAMS ${SOURCE_DIR}/wrap/${name}.py TYPE BIN)
+endmacro()
+
+add_wrapper(jplay)
+
+add_wrapper(GenCon)
+target_link_libraries(GenCon GenericContainer_osx_static_debug)
+
+install(TARGETS 
+  jplay GenCon
+  DESTINATION bin
 )
-
-add_library(jplay SHARED ${SOURCE_DIR}/wrap/jplay.cpp)
-target_include_directories(jplay PUBLIC ${Python3_INCLUDE_DIRS})
-target_link_directories(jplay PUBLIC ${Python3_LIBRARY_DIRS})
-set_target_properties (jplay PROPERTIES PREFIX "")
-set_target_properties (jplay PROPERTIES OUTPUT_NAME "_jplay")
-if (WIN32)
-  set_target_properties (jplay PROPERTIES SUFFIX ".pyd")
-else()
-  set_target_properties (jplay PROPERTIES SUFFIX ".so")
-endif()
-target_link_libraries(jplay ${LIB_LIST} ${Python3_LIBRARIES})
-
-
-install(TARGETS jplay DESTINATION bin)
-install(PROGRAMS ${SOURCE_DIR}/wrap/jplay.py TYPE BIN)
