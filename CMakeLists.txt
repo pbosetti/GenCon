@@ -47,11 +47,12 @@ add_compile_definitions(_GNU_SOURCE)
 
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/src/wrap)
 
+add_executable(jplay_test ${SOURCE_DIR}/main/jplay.cpp)
 
 add_executable(gencon_test ${SOURCE_DIR}/main/gencon.cpp)
 target_link_libraries(gencon_test GenericContainer_osx_static_debug)
+add_dependencies(gencon_test utils_GenericContainer_Static)
 
-add_executable(jplay_test ${SOURCE_DIR}/main/jplay.cpp)
 
 
 set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_LIST_DIR}/usr)

@@ -33,6 +33,7 @@ add_wrapper(jplay)
 
 add_wrapper(GenCon)
 target_link_libraries(GenCon GenericContainer_osx_static_debug)
+add_dependencies(GenCon utils_GenericContainer_Static)
 
 install(TARGETS 
   jplay GenCon
