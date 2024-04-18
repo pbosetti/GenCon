@@ -1,8 +1,11 @@
 %module GenCon
 %include "std_string.i"
 
+// Allows omitting the namespace in the generated code
 %rename(GenericContainer) GC_namespace::GenericContainer;
 
+
+// Injected C++ code
 %{
 #include "../gencon.hpp"
 #include <GenericContainer.hh>
@@ -10,7 +13,18 @@
 using namespace std;
 using namespace GC_namespace;
 
+/*
+  _   _ _   _ _ _ _   _           
+ | | | | |_(_) (_) |_(_) ___  ___ 
+ | | | | __| | | | __| |/ _ \/ __|
+ | |_| | |_| | | | |_| |  __/\__ \
+  \___/ \__|_|_|_|\__|_|\___||___/
+                                  
+*/
+
 static int dict_into_gc(PyObject *obj, GenericContainer *gc);
+
+/* From GC to Python Dictionary ***********************************************/
 
 static int array_into_dict(PyObject *obj, GenericContainer *gc, string key) {
   if (PyList_Check(obj)) {
@@ -87,49 +101,93 @@ static int dict_into_gc(PyObject *obj, GenericContainer *gc) {
   return 0;
 }
 
-static int gc_into_dict(GenericContainer *gc, PyObject *obj) {
-  
-  return 0;
+/* From Python Dictionary to GC ***********************************************/
+
+static void PyObj_add_item(PyObject *obj, string key, PyObject *value) {
+  PyDict_SetItemString(obj, key.c_str(), value);
 }
-/*
-  for (json::iterator it = j->begin(); it != j->end(); ++it) {
-    if (it.value().is_number_integer()) {
-      PyDict_SetItemString(obj, it.key().c_str(), PyLong_FromLong(it.value().get<int>()));
-    } else if (it.value().is_number_float()) {
-      PyDict_SetItemString(obj, it.key().c_str(), PyFloat_FromDouble(it.value().get<double>()));
-    } else if (it.value().is_string()) {
-      PyDict_SetItemString(obj, it.key().c_str(), PyUnicode_FromString(it.value().get<string>().c_str()));
-    } else if (it.value().is_boolean()) {
-      PyDict_SetItemString(obj, it.key().c_str(), PyBool_FromLong(it.value().get<bool>()));
-    } else if (it.value().is_array()) {
-      PyObject *list = PyList_New(it.value().size());
-      for (size_t i = 0; i < it.value().size(); i++) {
-        if (it.value()[i].is_number_integer()) {
-          PyList_SetItem(list, i, PyLong_FromLong(it.value()[i].get<int>()));
-        } else if (it.value()[i].is_number_float()) {
-          PyList_SetItem(list, i, PyFloat_FromDouble(it.value()[i].get<double>()));
-        } else if (it.value()[i].is_string()) {
-          PyList_SetItem(list, i, PyUnicode_FromString(it.value()[i].get<string>().c_str()));
-        } else {
-          PyErr_SetString(PyExc_TypeError, (string("unsupported type in list ") + it.key()).c_str());
-          return 1;
-        }
+
+static void PyObj_add_item(PyObject *obj, Py_ssize_t index, PyObject *value) {
+  PyList_SetItem(obj, index, value);
+}
+
+template <typename T>
+static int gc_into_dict(GenericContainer const *gc, PyObject *obj, 
+                        T key = nullptr) {
+  // The root object must be a dictionary: function has two parameters
+  if constexpr (std::is_same<T, nullptr_t>::value) {
+    map_type const &m = gc->get_map();
+    if (gc->get_type() == TypeAllowed::MAP)
+      for (map_type::const_iterator it = m.begin(); it != m.end(); ++it) {
+        gc_into_dict<char const *>(&it->second, obj, it->first.c_str());
       }
-      PyDict_SetItemString(obj, it.key().c_str(), list);
-    } else if (it.value().is_object()) {
-      PyObject *sub = PyDict_New();
-      json_into_dict(&it.value(), sub);
-      PyDict_SetItemString(obj, it.key().c_str(), sub);
-    } else {
-      PyErr_SetString(PyExc_TypeError, (string("unsupported type in dictionary ") + it.key()).c_str());
+    else {
+      PyErr_SetString(PyExc_TypeError, "Root element of GenericContainer is not a map");
       return 1;
     }
+    return 0;
+  }
+  // Function has beenm called recursively on an element of root dictionary
+  switch (gc->get_type()) {
+  case TypeAllowed::BOOL:
+    if (gc->get_bool())
+      PyObj_add_item(obj, key, Py_True);
+    else
+      PyObj_add_item(obj, key, Py_False);
+    break;
+  case TypeAllowed::INTEGER:
+    PyObj_add_item(obj, key, PyInt_FromLong((long_type)gc->get_int()));
+    break;
+  case TypeAllowed::LONG:
+    PyObj_add_item(obj, key, PyInt_FromLong((long_type)gc->get_long()));
+    break;
+  case TypeAllowed::REAL:
+    PyObj_add_item(obj, key, PyFloat_FromDouble(gc->get_real()));
+    break;
+  case TypeAllowed::COMPLEX: {
+    real_type re, im;
+    gc->get_complex_number(re, im);
+    PyObject *c = PyComplex_FromDoubles(re, im);
+    PyObj_add_item(obj, key, c);
+  } break;
+  case TypeAllowed::STRING:
+    PyObj_add_item(obj, key, PyString_FromString(gc->get_string().c_str()));
+    break;
+  case TypeAllowed::VECTOR: {
+    vector_type const &v = gc->get_vector();
+    PyObject *data = PyList_New(v.size());
+    for (Py_ssize_t i = 0; i < v.size(); ++i) {
+      gc_into_dict<Py_ssize_t>(&v[i], data, i);
+    }
+    PyObj_add_item(obj, key, data);
+  } break;
+  case TypeAllowed::MAP: {
+    map_type const &m = gc->get_map();
+    PyObject *data = PyDict_New();
+    for (map_type::const_iterator it = m.begin(); it != m.end(); ++it) {
+      gc_into_dict<char const *>(&it->second, data, it->first.c_str());
+    }
+    PyObj_add_item(obj, key, data);
+  } break;
+  default:
+    PyErr_SetString(
+        PyExc_TypeError,
+        (string("Type not managed: ") + gc->get_type_name()).c_str());
+    return 1;
   }
   return 0;
 }
-*/
 %}
 
+
+/*
+  _____                                             ___ _   _ 
+ |_   _|   _ _ __   ___ _ __ ___   __ _ _ __  ___  |_ _| \ | |
+   | || | | | '_ \ / _ \ '_ ` _ \ / _` | '_ \/ __|  | ||  \| |
+   | || |_| | |_) |  __/ | | | | | (_| | |_) \__ \  | || |\  |
+   |_| \__, | .__/ \___|_| |_| |_|\__,_| .__/|___/ |___|_| \_|
+       |___/|_|                        |_|                    
+*/
 %typemap(in) GenericContainer &gc {
   if (PyDict_Check($input)) {
     $1 = new GenericContainer();
@@ -143,11 +201,18 @@ static int gc_into_dict(GenericContainer *gc, PyObject *obj) {
   }
 }
 %typemap(freearg) GenericContainer &gc {
-  if ($1) {
-    delete $1;
-  }
+  if ($1) delete $1;
 }
 
+
+/*
+  _____                                              ___  _   _ _____ 
+ |_   _|   _ _ __   ___ _ __ ___   __ _ _ __  ___   / _ \| | | |_   _|
+   | || | | | '_ \ / _ \ '_ ` _ \ / _` | '_ \/ __| | | | | | | | | |  
+   | || |_| | |_) |  __/ | | | | | (_| | |_) \__ \ | |_| | |_| | | |  
+   |_| \__, | .__/ \___|_| |_| |_|\__,_| .__/|___/  \___/ \___/  |_|  
+       |___/|_|                        |_|                            
+*/
 
 %typemap(out) string {
   $result = PyString_FromString($1.c_str());
@@ -156,10 +221,19 @@ static int gc_into_dict(GenericContainer *gc, PyObject *obj) {
 %typemap(out) GenericContainer {
   // Dictionary typemap
   $result = PyDict_New();
-  if (gc_into_dict(&$1, $result)) 
+  if (gc_into_dict<nullptr_t>(&$1, $result)) 
     SWIG_fail;
 }
 
+
+/*
+ __        __                                   
+ \ \      / / __ __ _ _ __  _ __   ___ _ __ ___ 
+  \ \ /\ / / '__/ _` | '_ \| '_ \ / _ \ '__/ __|
+   \ V  V /| | | (_| | |_) | |_) |  __/ |  \__ \
+    \_/\_/ |_|  \__,_| .__/| .__/ \___|_|  |___/
+                     |_|   |_|                  
+*/
 
 class GenCon {
 

@@ -19,7 +19,9 @@ using namespace GC_namespace;
 
 class GenCon {
 public:
-  GenCon() : _gc(produce()) {}
+  GenCon() {
+    _gc["int"] = 42;
+  }
 
   ~GenCon() {}
 
@@ -36,11 +38,7 @@ public:
   }
 
   GenericContainer produce() {
-    GenericContainer gc;
-    gc["name"] = "John";
-    gc["age"] = 25;
-    gc["is_student"] = true;
-    return gc;
+    return _gc;
   }
 
 private:
